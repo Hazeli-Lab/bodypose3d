@@ -1,5 +1,5 @@
 import numpy as np
-
+from scipy.linalg import svd
 
 def _make_homogeneous_rep_matrix(R, t):
     P = np.zeros((4,4))
@@ -11,22 +11,14 @@ def _make_homogeneous_rep_matrix(R, t):
 #direct linear transform
 def DLT(P1, P2, point1, point2):
 
-    A = [point1[1]*P1[2,:] - P1[1,:],
-         P1[0,:] - point1[0]*P1[2,:],
-         point2[1]*P2[2,:] - P2[1,:],
-         P2[0,:] - point2[0]*P2[2,:]
-        ]
-    A = np.array(A).reshape((4,4))
-    #print('A: ')
-    #print(A)
-
-    B = A.transpose() @ A
-    from scipy import linalg
-    U, s, Vh = linalg.svd(B, full_matrices = False)
-
-    #print('Triangulated point: ')
-    #print(Vh[3,0:3]/Vh[3,3])
-    return Vh[3,0:3]/Vh[3,3]
+    A = np.array([
+        point1[1]*P1[2,:] - P1[1,:],
+        P1[0,:] - point1[0]*P1[2,:],
+        point2[1]*P2[2,:] - P2[1,:],
+        P2[0,:] - point2[0]*P2[2,:]
+    ])
+    _, _, Vh = svd(A, full_matrices=False, overwrite_a=True, check_finite=False, lapack_driver='gesvd')
+    return Vh[3, 0:3] / Vh[3, 3]
 
 def read_camera_parameters(camera_id):
 
