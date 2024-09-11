@@ -69,6 +69,10 @@ def _convert_to_homogeneous(pts):
     else:
         return np.concatenate([pts, [1]], axis = 0)
 
+def inv_homogeneous_matrix(R, T):
+    R_inv = np.linalg.inv(R)
+    return _make_homogeneous_rep_matrix(R_inv, -(R_inv @ T))
+
 def get_projection_matrix(camera_id):
 
     #read camera parameters

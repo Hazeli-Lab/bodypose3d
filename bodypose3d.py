@@ -3,6 +3,8 @@ import mediapipe as mp
 import numpy as np
 import sys
 from utils import DLT, get_projection_matrix, write_keypoints_to_disk
+import utils
+import time
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -13,7 +15,7 @@ frame_shape = [720, 1280]
 #add here if you need more keypoints
 pose_keypoints = [16, 14, 12, 11, 13, 15, 24, 23, 25, 26, 27, 28]
 
-def run_mp(input_stream1, input_stream2, P0, P1):
+def run_mp(input_stream1, input_stream2, P0, P1, C0, C1):
     #input video stream
     cap0 = cv.VideoCapture(input_stream1)
     cap1 = cv.VideoCapture(input_stream2)
@@ -33,6 +35,8 @@ def run_mp(input_stream1, input_stream2, P0, P1):
     kpts_cam0 = []
     kpts_cam1 = []
     kpts_3d = []
+
+    time_count = 0
     while True:
 
         #read frames from stream
@@ -103,19 +107,36 @@ def run_mp(input_stream1, input_stream2, P0, P1):
         kpts_cam1.append(frame1_keypoints)
 
         #calculate 3d position
-        frame_p3ds = []
-        for uv1, uv2 in zip(frame0_keypoints, frame1_keypoints):
-            if uv1[0] == -1 or uv2[0] == -1:
-                _p3d = [-1, -1, -1]
-            else:
-                _p3d = DLT(P0, P1, uv1, uv2) #calculate 3d position of keypoint
-            frame_p3ds.append(_p3d)
+        t_start = time.perf_counter()
+        frame0_keypoints = np.array(frame0_keypoints, dtype=float)
+        frame1_keypoints = np.array(frame1_keypoints, dtype=float)
+        # frame0_keypoints = cv.undistortImagePoints(frame0_keypoints.T, *C0)
+        # frame1_keypoints = cv.undistortImagePoints(frame1_keypoints.T, *C1)
+        frame0_keypoints = cv.undistortPoints(frame0_keypoints.T, *C0)
+        frame1_keypoints = cv.undistortPoints(frame1_keypoints.T, *C1)
+        frame0_keypoints = frame0_keypoints.reshape(frame0_keypoints.shape[0], 2)
+        frame1_keypoints = frame1_keypoints.reshape(frame1_keypoints.shape[0], 2)
+
+        # frame_p3ds = []
+        # for uv1, uv2 in zip(frame0_keypoints, frame1_keypoints):
+        #     if uv1[0] == -1 or uv2[0] == -1:
+        #         _p3d = [-1, -1, -1]
+        #     else:
+        #         _p3d = DLT(P0, P1, uv1, uv2) #calculate 3d position of keypoint
+        #         # uv1 = np.array(uv1, dtype=float)
+        #         # uv2 = np.array(uv2, dtype=float)
+        #         # _p3d = cv.triangulatePoints(P0, P1, uv1, uv2) # using cv.triangulatePoints
+        #         # _p3d = _p3d[:3] / _p3d[3]
+        #     frame_p3ds.append(_p3d)
+        frame_p3ds = cv.triangulatePoints(P0, P1, np.array(frame0_keypoints, dtype=float).T, np.array(frame1_keypoints, dtype=float).T)
+        frame_p3ds = (frame_p3ds[:3] / frame_p3ds[3]).T  # 3 times faster
+        time_count += time.perf_counter() - t_start
 
         '''
         This contains the 3d position of each keypoint in current frame.
         For real time application, this is what you want.
         '''
-        frame_p3ds = np.array(frame_p3ds).reshape((12, 3))
+        frame_p3ds = np.array(frame_p3ds).reshape((len(pose_keypoints), -1))
         kpts_3d.append(frame_p3ds)
 
         # uncomment these if you want to see the full keypoints detections
@@ -136,7 +157,7 @@ def run_mp(input_stream1, input_stream2, P0, P1):
     for cap in caps:
         cap.release()
 
-
+    print(f"Time used: {time_count * 1000:f} ms.")
     return np.array(kpts_cam0), np.array(kpts_cam1), np.array(kpts_3d)
 
 if __name__ == '__main__':
@@ -154,7 +175,20 @@ if __name__ == '__main__':
     P0 = get_projection_matrix(0)
     P1 = get_projection_matrix(1)
 
-    kpts_cam0, kpts_cam1, kpts_3d = run_mp(input_stream1, input_stream2, P0, P1)
+    # # set camera 0 as reference
+    # import utils
+    # R, T = utils.read_rotation_translation(0)
+    # P_inv = utils.inv_homogeneous_matrix(R, T)
+    # P0 = P0 @ P_inv
+    # P1 = P1 @ P_inv
+
+    C0 = utils.read_camera_parameters(0)
+    C1 = utils.read_camera_parameters(1)
+    # Note: use projection to camera focal plane below when used with cv.undistortPoints() which is slightly faster
+    P0 = utils._make_homogeneous_rep_matrix(*utils.read_rotation_translation(0))[:3,:]
+    P1 = utils._make_homogeneous_rep_matrix(*utils.read_rotation_translation(1))[:3,:]
+
+    kpts_cam0, kpts_cam1, kpts_3d = run_mp(input_stream1, input_stream2, P0, P1, C0, C1)
 
     #this will create keypoints file in current working folder
     write_keypoints_to_disk('kpts_cam0.dat', kpts_cam0)
