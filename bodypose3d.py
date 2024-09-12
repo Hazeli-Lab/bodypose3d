@@ -108,14 +108,6 @@ def run_mp(input_stream1, input_stream2, P0, P1, C0, C1):
 
         #calculate 3d position
         t_start = time.perf_counter()
-        frame0_keypoints = np.array(frame0_keypoints, dtype=float)
-        frame1_keypoints = np.array(frame1_keypoints, dtype=float)
-        # frame0_keypoints = cv.undistortImagePoints(frame0_keypoints.T, *C0)
-        # frame1_keypoints = cv.undistortImagePoints(frame1_keypoints.T, *C1)
-        frame0_keypoints = cv.undistortPoints(frame0_keypoints.T, *C0)
-        frame1_keypoints = cv.undistortPoints(frame1_keypoints.T, *C1)
-        frame0_keypoints = frame0_keypoints.reshape(frame0_keypoints.shape[0], 2)
-        frame1_keypoints = frame1_keypoints.reshape(frame1_keypoints.shape[0], 2)
 
         # frame_p3ds = []
         # for uv1, uv2 in zip(frame0_keypoints, frame1_keypoints):
@@ -128,7 +120,14 @@ def run_mp(input_stream1, input_stream2, P0, P1, C0, C1):
         #         # _p3d = cv.triangulatePoints(P0, P1, uv1, uv2) # using cv.triangulatePoints
         #         # _p3d = _p3d[:3] / _p3d[3]
         #     frame_p3ds.append(_p3d)
-        frame_p3ds = cv.triangulatePoints(P0, P1, np.array(frame0_keypoints, dtype=float).T, np.array(frame1_keypoints, dtype=float).T)
+
+        frame0_keypoints = np.array(frame0_keypoints, dtype=float).reshape(-1, 1, 2)
+        frame1_keypoints = np.array(frame1_keypoints, dtype=float).reshape(-1, 1, 2)
+        # frame0_keypoints = cv.undistortImagePoints(frame0_keypoints, *C0)
+        # frame1_keypoints = cv.undistortImagePoints(frame1_keypoints, *C1)
+        frame0_keypoints = cv.undistortPoints(frame0_keypoints, *C0)
+        frame1_keypoints = cv.undistortPoints(frame1_keypoints, *C1)
+        pos3d_hom = cv.triangulatePoints(P0, P1, frame0_keypoints, frame1_keypoints)
         frame_p3ds = (frame_p3ds[:3] / frame_p3ds[3]).T  # 3 times faster
         time_count += time.perf_counter() - t_start
 
